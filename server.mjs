@@ -10,7 +10,6 @@ const __dirname = path.dirname(__filename);
    CONFIGURAÇÃO
    ========================================================= */
 
-const PORT = Number(process.env.PORT || 8080);
 const HOST = "::";
 
 // Carrega .env local sem sobrescrever variáveis já definidas no ambiente.
