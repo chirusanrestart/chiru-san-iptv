@@ -10,14 +10,30 @@ const __dirname = path.dirname(__filename);
    CONFIGURAÇÃO
    ========================================================= */
 
-const PORT = 3000;
+const PORT = Number(process.env.PORT || 8080);
 const HOST = "::";
+
+// Carrega .env local sem sobrescrever variáveis já definidas no ambiente.
+try {
+  const envText = fs.readFileSync(path.join(__dirname, ".env"), "utf8");
+  for (const rawLine of envText.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith("#")) continue;
+    const match = line.match(/^(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/);
+    if (!match || process.env[match[1]] !== undefined) continue;
+    let value = match[2].trim();
+    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) value = value.slice(1, -1);
+    process.env[match[1]] = value;
+  }
+} catch (error) {
+  if (error.code !== "ENOENT") console.warn("⚠️ Não foi possível ler .env local:", error.message);
+}
 
 const DYNU_HOSTNAME = "chirusanrestart.freeddns.org";
 
-// COLOQUE SEU USUÁRIO E SENHA DO DYNU AQUI
-const DYNU_USERNAME = "chiruzinha";
-const DYNU_PASSWORD = "GALAHADPLAY999";
+// Credenciais lidas do arquivo .env local, nunca do código versionado.
+const DYNU_USERNAME = process.env.DYNU_USERNAME || "";
+const DYNU_PASSWORD = process.env.DYNU_PASSWORD || "";
 
 const VIDEOS_FILE = path.join(__dirname, "videos.json");
 const IPV6_CACHE_FILE = path.join(__dirname, "dynu-ipv6.json");
@@ -300,6 +316,10 @@ async function atualizarDynu(ipv6) {
    ========================================================= */
 
 async function atualizarIPv6() {
+  if (!DYNU_USERNAME || !DYNU_PASSWORD) {
+    console.warn("⚠️ Configure DYNU_USERNAME e DYNU_PASSWORD no arquivo .env local; atualização Dynu ignorada.");
+    return;
+  }
   console.log("🔎 Descobrindo IPv6 público...");
 
   const ipv6 = await descobrirIPv6();
@@ -751,7 +771,7 @@ server.listen(
   {
     host: HOST,
     port: PORT,
-    ipv6Only: false
+    ipv6Only: true
   },
 
   async () => {
