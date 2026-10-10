@@ -28,7 +28,7 @@ try {
   if (error.code !== "ENOENT") console.warn("⚠️ Não foi possível ler .env local:", error.message);
 }
 
-const PORT = Number(process.env.PORT || 8080);
+const PORT = Number(process.env.PORT || 18080);
 const DYNU_HOSTNAME = "chirusanrestart.freeddns.org";
 
 // Credenciais lidas do arquivo .env local, nunca do código versionado.
