@@ -9,6 +9,7 @@ import { pipeline } from "node:stream/promises";
 import { refreshCatalog } from "./catalogar.mjs";
 import { HlsRuntime } from "./runtime.mjs";
 import { startHostlessAgent } from "./hostless-agent.mjs";
+import { AsyncTaskQueue } from "./async-task-queue.mjs";
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.join(ROOT, "data");
@@ -51,11 +52,27 @@ const TUNNEL_RECEIVER_URL = TUNNEL_STREAM_ID
   : "";
 const HOSTLESS_CACHE_TTL_SECONDS = Math.min(3600, Math.max(60, Number(process.env.HOSTLESS_CACHE_TTL_SECONDS || CACHE_SECONDS + 120) || 300));
 const HOSTLESS_AGENT_WORKERS = Math.max(1, Math.min(8, Number(process.env.HOSTLESS_AGENT_WORKERS || 3)));
-const cacheUploadsInFlight = new Map();
+const HOSTLESS_UPLOAD_WORKERS = Math.max(1, Math.min(8, Number(process.env.HOSTLESS_UPLOAD_WORKERS || 3)));
 
 let videos = [];
 let refreshInProgress = false;
 const runtime = new HlsRuntime({ maxJobs: MAX_HLS_JOBS });
+const hostlessUploadQueue = new AsyncTaskQueue({
+  concurrency: HOSTLESS_UPLOAD_WORKERS,
+  maxPending: Math.max(16, MAX_SEGMENTS * 2)
+});
+const hostlessUploadedSegments = new Map();
+
+function uploadedSegmentsFor(streamId) {
+  let uploaded = hostlessUploadedSegments.get(streamId);
+  if (!uploaded) uploaded = new Set();
+  hostlessUploadedSegments.delete(streamId);
+  hostlessUploadedSegments.set(streamId, uploaded);
+  while (hostlessUploadedSegments.size > 64) {
+    hostlessUploadedSegments.delete(hostlessUploadedSegments.keys().next().value);
+  }
+  return uploaded;
+}
 
 async function loadCatalogFromDisk() {
   try {
@@ -240,33 +257,20 @@ async function waitForPlaylist(id, job, timeoutMs = 30_000) {
 }
 
 async function uploadHlsSegmentToHostless(streamId, filename, filePath) {
-  const key = streamId + "/" + filename;
-  if (cacheUploadsInFlight.has(key)) return cacheUploadsInFlight.get(key);
-
-  const upload = (async () => {
-    const data = await fs.readFile(filePath);
-    const target = new URL("/cache/" + encodeURIComponent(streamId) + "/" + encodeURIComponent(filename), HOSTLESS_CACHE_URL);
-    const response = await fetch(target, {
-      method: "POST",
-      headers: {
-        "Content-Type": "video/mp2t",
-        "X-Cache-TTL": String(HOSTLESS_CACHE_TTL_SECONDS)
-      },
-      body: data,
-      signal: AbortSignal.timeout(20_000)
-    });
-    const responseBody = await response.text().catch(() => "");
-    if (!response.ok) {
-      throw new Error("Hostless HTTP " + response.status + (responseBody ? ": " + responseBody.slice(0, 160) : ""));
-    }
-    return true;
-  })();
-
-  cacheUploadsInFlight.set(key, upload);
-  try {
-    return await upload;
-  } finally {
-    if (cacheUploadsInFlight.get(key) === upload) cacheUploadsInFlight.delete(key);
+  const data = await fs.readFile(filePath);
+  const target = new URL("/cache/" + encodeURIComponent(streamId) + "/" + encodeURIComponent(filename), HOSTLESS_CACHE_URL);
+  const response = await fetch(target, {
+    method: "POST",
+    headers: {
+      "Content-Type": "video/mp2t",
+      "X-Cache-TTL": String(HOSTLESS_CACHE_TTL_SECONDS)
+    },
+    body: data,
+    signal: AbortSignal.timeout(20_000)
+  });
+  const responseBody = await response.text().catch(() => "");
+  if (!response.ok) {
+    throw new Error("Hostless HTTP " + response.status + (responseBody ? ": " + responseBody.slice(0, 160) : ""));
   }
 }
 
@@ -274,39 +278,30 @@ async function publishHlsSegmentsToHostless(id, job, playlistText) {
   if (!HOSTLESS_CACHE_ENABLED) return playlistText;
 
   const streamId = cacheKey(id) + "_" + job.startedAt.toString(36);
-  const listUrl = new URL("/cache/" + encodeURIComponent(streamId), HOSTLESS_CACHE_URL);
-  let available;
-
-  try {
-    const response = await fetch(listUrl, { signal: AbortSignal.timeout(12_000) });
-    if (!response.ok) throw new Error("Hostless HTTP " + response.status);
-    const data = await response.json();
-    available = new Set(Array.isArray(data.segments) ? data.segments.map((segment) => segment.id) : []);
-  } catch (error) {
-    console.warn("⚠️ Hostless indisponível; usando segmentos locais:", error.message);
-    return playlistText;
-  }
-
+  const uploaded = uploadedSegmentsFor(streamId);
   const lines = playlistText.split(/\r?\n/);
+
   for (let index = 0; index < lines.length; index += 1) {
     const filename = lines[index].trim();
     if (!/^segment_\d{6}\.ts$/.test(filename)) continue;
 
-    if (!available.has(filename)) {
+    if (uploaded.has(filename)) {
+      lines[index] = new URL("/cache/" + encodeURIComponent(streamId) + "/" + encodeURIComponent(filename), HOSTLESS_CACHE_URL).href;
+      continue;
+    }
+
+    hostlessUploadQueue.enqueue(streamId + "/" + filename, async () => {
       try {
         await uploadHlsSegmentToHostless(streamId, filename, hlsPath(id, filename));
-        available.add(filename);
+        uploaded.add(filename);
       } catch (error) {
         console.warn("⚠️ Não foi possível publicar " + filename + " no Hostless:", error.message);
-        continue;
       }
-    }
-
-    if (available.has(filename)) {
-      lines[index] = new URL("/cache/" + encodeURIComponent(streamId) + "/" + encodeURIComponent(filename), HOSTLESS_CACHE_URL).href;
-    }
+    });
   }
 
+  // Segmentos ainda na fila continuam usando o endpoint local/tunnel.
+  // Quando o upload termina, a próxima atualização da playlist usa a URL do Hostless.
   return lines.join("\n");
 }
 
@@ -393,14 +388,15 @@ const server = http.createServer(async (req, res) => {
     return res.end(JSON.stringify({
       ok: true, service: "chiru-san-iptv", platform: "termux",
       videos: videos.length, refreshing: refreshInProgress,
-      ffmpegJobs: runtime.jobs.size, hlsSegmentSeconds: SEGMENT_SECONDS, hlsCacheSeconds: CACHE_SECONDS, maxHlsJobs: MAX_HLS_JOBS, hostlessCacheEnabled: HOSTLESS_CACHE_ENABLED
+      ffmpegJobs: runtime.jobs.size, hlsSegmentSeconds: SEGMENT_SECONDS, hlsCacheSeconds: CACHE_SECONDS, maxHlsJobs: MAX_HLS_JOBS, hostlessUploadWorkers: HOSTLESS_UPLOAD_WORKERS, hostlessUploads: hostlessUploadQueue.stats(), hostlessCacheEnabled: HOSTLESS_CACHE_ENABLED
     }));
   }
 
   if (url.pathname === "/stats") {
     try {
       const stats = await runtime.stats(HLS_DIR);
-      stats.limits = { maxHlsJobs: MAX_HLS_JOBS, idleStopSeconds: Math.floor(HLS_IDLE_MS / 1000), cacheWindowSeconds: CACHE_SECONDS };
+      stats.hostlessUploadQueue = hostlessUploadQueue.stats();
+      stats.limits = { maxHlsJobs: MAX_HLS_JOBS, hostlessUploadWorkers: HOSTLESS_UPLOAD_WORKERS, idleStopSeconds: Math.floor(HLS_IDLE_MS / 1000), cacheWindowSeconds: CACHE_SECONDS };
       res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
       return res.end(JSON.stringify(stats));
     } catch (error) {
@@ -475,6 +471,7 @@ server.listen({ host: HOST, port: PORT, ipv6Only: false }, () => {
   console.log(`🩺 Health local: http://127.0.0.1:${PORT}/health`);
   console.log(`🔄 Catálogo: a cada ${Math.round(REFRESH_MS / 60000)} minuto(s)`);
   console.log(`🎬 FFmpeg: ${FFMPEG}; segmentos-alvo ${SEGMENT_SECONDS}s; cache ${CACHE_SECONDS}s`);
+  console.log(`☁️ Upload HLS assíncrono: ${HOSTLESS_UPLOAD_WORKERS} workers em fila FIFO`);
 });
 
 setInterval(updateCatalog, REFRESH_MS);
