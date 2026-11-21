@@ -8,6 +8,7 @@ import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { refreshCatalog } from "./catalogar.mjs";
 import { HlsRuntime } from "./runtime.mjs";
+import { startHostlessAgent } from "./hostless-agent.mjs";
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.join(ROOT, "data");
@@ -49,6 +50,8 @@ const TUNNEL_RECEIVER_URL = TUNNEL_STREAM_ID
   ? new URL("/receber/" + encodeURIComponent(TUNNEL_STREAM_ID), TUNNEL_RELAY_URL).href
   : "";
 const HOSTLESS_CACHE_TTL_SECONDS = Math.min(3600, Math.max(60, Number(process.env.HOSTLESS_CACHE_TTL_SECONDS || CACHE_SECONDS + 120) || 300));
+const HOSTLESS_AGENT_TOKEN = String(process.env.HOSTLESS_AGENT_TOKEN || "").trim();
+const HOSTLESS_AGENT_WORKERS = Math.max(1, Math.min(8, Number(process.env.HOSTLESS_AGENT_WORKERS || 3)));
 const cacheUploadsInFlight = new Map();
 
 let videos = [];
@@ -107,14 +110,18 @@ function sendText(res, status, message) {
 }
 
 function makePlaylist(req, mode = "direct") {
-  const host = req.headers.host || `localhost:${PORT}`;
+  const forwardedHost = req.headers["x-forwarded-host"];
+  const host = forwardedHost || req.headers.host || `localhost:${PORT}`;
+  const protocol = String(req.headers["x-forwarded-proto"] || "http").split(",")[0].trim() === "https" ? "https" : "http";
+  const prefix = String(req.headers["x-forwarded-prefix"] || "").replace(/\/+$/, "");
+  const base = `${protocol}://${host}${prefix}`;
   const lines = ["#EXTM3U"];
   videos.forEach((video, index) => {
     const id = encodeURIComponent(videoId(video, index));
     const title = String(video.title || video.name || `Vídeo ${index + 1}`).replace(/[\r\n]/g, " ");
     const duration = Number(video.duration);
     lines.push(`#EXTINF:${Number.isFinite(duration) && duration > 0 ? Math.floor(duration) : -1},${title}`);
-    lines.push(mode === "hls" ? `http://${host}/hls/${id}/index.m3u8` : `http://${host}/video/${id}`);
+    lines.push(mode === "hls" ? `${base}/hls/${id}/index.m3u8` : `${base}/video/${id}`);
   });
   return lines.join("\n") + "\n";
 }
@@ -422,9 +429,10 @@ const server = http.createServer(async (req, res) => {
     return res.end(body);
   }
 
-  if (url.pathname === "/playlist.m3u" || url.pathname === "/playlist-hls.m3u") {
-    const playlist = makePlaylist(req, url.pathname === "/playlist-hls.m3u" ? "hls" : "direct");
-    res.writeHead(200, { "Content-Type": "audio/x-mpegurl; charset=utf-8", "Content-Length": Buffer.byteLength(playlist), "Cache-Control": "no-store" });
+  if (url.pathname === "/playlist.m3u" || url.pathname === "/playlist-hls.m3u" || url.pathname === "/playlist-hls.m3u8") {
+    const isHlsPlaylist = url.pathname === "/playlist-hls.m3u" || url.pathname === "/playlist-hls.m3u8";
+    const playlist = makePlaylist(req, isHlsPlaylist ? "hls" : "direct");
+    res.writeHead(200, { "Content-Type": isHlsPlaylist ? "application/vnd.apple.mpegurl; charset=utf-8" : "audio/x-mpegurl; charset=utf-8", "Content-Length": Buffer.byteLength(playlist), "Cache-Control": "no-store" });
     return res.end(playlist);
   }
 
@@ -462,6 +470,8 @@ server.listen({ host: HOST, port: PORT, ipv6Only: false }, () => {
   console.log("📺 CHIRU-SAN IPTV | TERMUX");
   console.log(`🌐 Escutando em http://[::]:${PORT}`);
   console.log(`🌐 Relay público: ${TUNNEL_RELAY_URL}`);
+  console.log(`📺 Playlist HLS pública: ${HOSTLESS_AGENT_TOKEN ? TUNNEL_RELAY_URL + "/iptv/playlist-hls.m3u8" : "configure HOSTLESS_AGENT_TOKEN no Termux e AGENT_TOKEN no Hostless"}`);
+  if (HOSTLESS_AGENT_TOKEN) startHostlessAgent({ port: PORT, relayUrl: HOSTLESS_CACHE_URL, token: HOSTLESS_AGENT_TOKEN, workers: HOSTLESS_AGENT_WORKERS });
   console.log(`📡 Tunnel receiver: ${TUNNEL_RECEIVER_URL || "gerado por vídeo: npm run tunnel -- <id>"}`);
   console.log(`📡 Playlist direta local: http://127.0.0.1:${PORT}/playlist.m3u`);
   console.log(`🎞️ HLS local por vídeo: http://127.0.0.1:${PORT}/hls/ID/index.m3u8`);
