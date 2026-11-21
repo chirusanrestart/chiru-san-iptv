@@ -4,12 +4,12 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { fetchImageUrls } from "@marcus5914/google-photos-album-image-url-fetch";
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
-const ALBUM_URL = process.env.GOOGLE_PHOTOS_ALBUM_URL || "https://photos.app.goo.gl/ieE9pLKupTC7TxFU6";
 const VIDEOS_FILE = path.join(ROOT, "data", "videos.json");
 
 export async function refreshCatalog() {
+  const albumUrl = process.env.GOOGLE_PHOTOS_ALBUM_URL || "https://photos.app.goo.gl/ieE9pLKupTC7TxFU6";
   console.log("☁️ Consultando álbum do Google Fotos...");
-  const items = await fetchImageUrls(ALBUM_URL);
+  const items = await fetchImageUrls(albumUrl);
 
   if (!Array.isArray(items)) {
     throw new TypeError("O extrator não retornou uma lista válida.");
@@ -41,7 +41,7 @@ export async function refreshCatalog() {
 
   console.log(`📦 Itens encontrados: ${items.length}`);
   console.log(`🎬 Vídeos catalogados: ${videos.length}`);
-  console.log("💾 Catálogo atualizado em data/videos.json");
+  console.log("💾 Catálogo salvo em data/videos.json");
   return videos;
 }
 
