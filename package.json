@@ -1,0 +1,17 @@
+{
+  "name": "chiru-san-iptv",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Servidor IPTV pessoal para Termux com catálogo do Google Fotos e relay externo opcional.",
+  "scripts": {
+    "start": "node server.mjs",
+    "catalog": "node catalogar.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@marcus5914/google-photos-album-image-url-fetch": "^1.1.0"
+  }
+}
