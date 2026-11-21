@@ -19,3 +19,5 @@ jobs:
           node --check server.mjs
           node --check catalogar.mjs
           node --check tunnel.mjs
+      - name: Run tests
+        run: node --test
