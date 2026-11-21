@@ -15,23 +15,20 @@ const FORWARDED_RESPONSE_HEADERS = [
 export function startHostlessAgent(options = {}) {
   const port = Number(options.port || 18080);
   const relayUrl = String(options.relayUrl || "").replace(/\/+$/, "");
-  const token = String(options.token || "").trim();
   const workers = Math.max(1, Math.min(8, Number(options.workers || 3)));
   const localBase = new URL(`http://127.0.0.1:${port}`);
 
-  if (!relayUrl || !token) {
-    console.warn("⚠️ Tunnel reverso Hostless desativado: configure HOSTLESS_CACHE_URL e HOSTLESS_AGENT_TOKEN.");
+  if (!relayUrl) {
+    console.warn("⚠️ Tunnel reverso Hostless desativado: configure HOSTLESS_CACHE_URL.");
     return () => {};
   }
 
   const relayBase = new URL(relayUrl);
-  const authorization = "Bearer " + token;
   let stopped = false;
 
   async function sendAgentResponse(job, status, headers, body) {
     const target = new URL("/agent/respond/" + encodeURIComponent(job.id), relayBase);
     const requestHeaders = {
-      Authorization: authorization,
       "X-Upstream-Status": String(status),
       "X-Upstream-Headers": Buffer.from(JSON.stringify(headers || {})).toString("base64")
     };
@@ -97,7 +94,6 @@ export function startHostlessAgent(options = {}) {
     while (!stopped) {
       try {
         const poll = await fetch(pollUrl, {
-          headers: { Authorization: authorization },
           signal: AbortSignal.timeout(35_000),
           cache: "no-store"
         });
