@@ -123,9 +123,9 @@ export class HlsRuntime {
     return {
       uptimeSeconds: Math.floor(process.uptime()),
       memory: process.memoryUsage(),
-      jobs: [...this.jobs.entries()].map(([id, job]) => ({
-        id, running: job.exitCode === null && !job.error,
-        exitCode: job.exitCode, error: job.error || null,
+      jobs: [...this.jobs.values()].map((job) => ({
+        running: job.exitCode === null && !job.error,
+        exitCode: job.exitCode,
         ageSeconds: Math.max(0, Math.floor((Date.now() - job.startedAt) / 1000)),
         idleSeconds: Math.max(0, Math.floor((Date.now() - (job.lastActivityAt || job.startedAt)) / 1000))
       })),
