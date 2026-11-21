@@ -50,7 +50,6 @@ const TUNNEL_RECEIVER_URL = TUNNEL_STREAM_ID
   ? new URL("/receber/" + encodeURIComponent(TUNNEL_STREAM_ID), TUNNEL_RELAY_URL).href
   : "";
 const HOSTLESS_CACHE_TTL_SECONDS = Math.min(3600, Math.max(60, Number(process.env.HOSTLESS_CACHE_TTL_SECONDS || CACHE_SECONDS + 120) || 300));
-const HOSTLESS_AGENT_TOKEN = String(process.env.HOSTLESS_AGENT_TOKEN || "").trim();
 const HOSTLESS_AGENT_WORKERS = Math.max(1, Math.min(8, Number(process.env.HOSTLESS_AGENT_WORKERS || 3)));
 const cacheUploadsInFlight = new Map();
 
@@ -410,9 +409,7 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (url.pathname === "/") {
-    const publicPlaylist = HOSTLESS_AGENT_TOKEN
-      ? `<p>📺 Player IPTV: <a href="${TUNNEL_RELAY_URL}/iptv/playlist-hls.m3u8">${TUNNEL_RELAY_URL}/iptv/playlist-hls.m3u8</a></p>`
-      : `<p>📺 Player IPTV público: configure HOSTLESS_AGENT_TOKEN no Termux e AGENT_TOKEN no Hostless.</p>`;
+    const publicPlaylist = `<p>📺 Player IPTV: <a href="${HOSTLESS_CACHE_URL}/iptv/playlist-hls.m3u8">${HOSTLESS_CACHE_URL}/iptv/playlist-hls.m3u8</a></p>`;
     const html = `<!doctype html><html lang="pt-BR"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Chiru-san IPTV</title><h1>📺 Chiru-san IPTV</h1><p>Servidor Termux online.</p><p>🌐 Relay público: <a href="${TUNNEL_RELAY_URL}">${TUNNEL_RELAY_URL}</a></p>${publicPlaylist}<p>Vídeos: ${videos.length}</p><p><a href="/playlist.m3u">Playlist direta local</a></p><p><a href="/playlist-hls.m3u8">Playlist HLS local</a></p><p><a href="/health">Health</a></p></html>`;
     res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Content-Length": Buffer.byteLength(html) });
     return res.end(html);
@@ -470,8 +467,8 @@ server.listen({ host: HOST, port: PORT, ipv6Only: false }, () => {
   console.log("📺 CHIRU-SAN IPTV | TERMUX");
   console.log(`🌐 Escutando em http://[::]:${PORT}`);
   console.log(`🌐 Relay público: ${TUNNEL_RELAY_URL}`);
-  console.log(`📺 Playlist HLS pública: ${HOSTLESS_AGENT_TOKEN ? HOSTLESS_CACHE_URL + "/iptv/playlist-hls.m3u8" : "configure HOSTLESS_AGENT_TOKEN no Termux e AGENT_TOKEN no Hostless"}`);
-  if (HOSTLESS_AGENT_TOKEN) startHostlessAgent({ port: PORT, relayUrl: HOSTLESS_CACHE_URL, token: HOSTLESS_AGENT_TOKEN, workers: HOSTLESS_AGENT_WORKERS });
+  console.log(`📺 Playlist HLS pública: ${HOSTLESS_CACHE_URL}/iptv/playlist-hls.m3u8`);
+  startHostlessAgent({ port: PORT, relayUrl: HOSTLESS_CACHE_URL, workers: HOSTLESS_AGENT_WORKERS });
   console.log(`📡 Tunnel linear legado: ${TUNNEL_RECEIVER_URL || "não iniciado; HLS usa o tunnel reverso automático"}`);
   console.log(`📡 Playlist direta local: http://127.0.0.1:${PORT}/playlist.m3u`);
   console.log(`🎞️ HLS local por vídeo: http://127.0.0.1:${PORT}/hls/ID/index.m3u8`);
