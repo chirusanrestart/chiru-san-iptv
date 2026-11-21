@@ -6,13 +6,29 @@ export class HlsRuntime {
     this.maxJobs = maxJobs;
     this.jobs = new Map();
     this.sessions = new Map();
+    this.starts = new Map();
   }
 
   getJob(id) { return this.jobs.get(String(id)) || null; }
   deleteJob(id) { return this.jobs.delete(String(id)); }
 
+  async startJob(id, factory) {
+    const key = String(id);
+    const existing = this.getJob(key);
+    if (existing && !existing.error && (existing.exitCode === null || existing.exitCode === 0)) return existing;
+    if (this.starts.has(key)) return this.starts.get(key);
+    if (!this.canStartJob()) {
+      const error = new Error(`FFmpeg concurrency limit (${this.maxJobs}) reached`);
+      error.code = "HLS_LIMIT";
+      throw error;
+    }
+    const pending = Promise.resolve().then(factory).then((job) => this.setJob(key, job)).finally(() => this.starts.delete(key));
+    this.starts.set(key, pending);
+    return pending;
+  }
+
   activeJobCount() {
-    return [...this.jobs.values()].filter((job) => job.exitCode === null && !job.error).length;
+    return [...this.jobs.values()].filter((job) => job.exitCode === null && !job.error).length + this.starts.size;
   }
 
   canStartJob() { return this.activeJobCount() < this.maxJobs; }
