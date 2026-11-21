@@ -19,6 +19,7 @@ Servidor padrão: `http://127.0.0.1:18080/`.
 ## Rotas
 
 - `/health`: estado do servidor, catálogo e parâmetros HLS.
+- `/stats`: sessões ativas, processos FFmpeg, uso de memória e tamanho/quantidade do cache local.
 - `/catalog.json`: metadados dos vídeos.
 - `/playlist.m3u`: playlist direta, usando `/video/:id`.
 - `/playlist-hls.m3u`: playlist HLS, usando `/hls/:id/index.m3u8`.
@@ -63,6 +64,10 @@ Edite `.env`:
 - `HLS_SEGMENT_SECONDS=4`: duração-alvo de cada segmento.
 - `HLS_CACHE_SECONDS=180`: tamanho temporal aproximado da janela de cache.
 - `FFMPEG_PATH=ffmpeg`: executável do FFmpeg.
+- `HLS_MAX_JOBS=2`: limite de processos FFmpeg simultâneos.
+- `HLS_IDLE_MS=90000`: encerra uma geração HLS sem pedidos após 90 segundos.
+
+O endpoint `/stats` mostra as métricas locais; diretórios HLS sem atividade por mais de 24 horas são removidos periodicamente.
 - `TUNNEL_RELAY_URL`: endereço do relay usado pelo comando de tunnel.
 - `HOSTLESS_CACHE_ENABLED=true`: ativa a publicação de segmentos HLS no cache remoto.
 - `HOSTLESS_CACHE_URL`: URL base do serviço Hostless que recebe os segmentos.
