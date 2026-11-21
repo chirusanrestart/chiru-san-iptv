@@ -73,12 +73,30 @@ export class HlsRuntime {
         if (!entry.isFile()) continue;
         const stat = await fs.stat(full);
         bytes += stat.size;
-        if (/^segment_\\d+\\.ts$/.test(entry.name)) segments++;
+        if (/^segment_\d+\.ts$/.test(entry.name)) segments++;
         if (entry.name.endsWith(".m3u8")) playlists++;
       }
     };
     await walk(cacheDir);
     return { bytes, segments, playlists, directories };
+  }
+
+  async pruneCache(cacheDir, { maxAgeMs = 86_400_000, protectedDirs = [], now = Date.now() } = {}) {
+    const protectedSet = new Set(protectedDirs.map((dir) => path.resolve(dir)));
+    let removed = 0;
+    let entries;
+    try { entries = await fs.readdir(cacheDir, { withFileTypes: true }); }
+    catch (error) { if (error.code === "ENOENT") return 0; throw error; }
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      const target = path.resolve(cacheDir, entry.name);
+      if (protectedSet.has(target)) continue;
+      const stat = await fs.stat(target);
+      if (now - stat.mtimeMs < maxAgeMs) continue;
+      await fs.rm(target, { recursive: true, force: true });
+      removed++;
+    }
+    return removed;
   }
 
   async stats(cacheDir) {
