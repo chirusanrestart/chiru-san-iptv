@@ -241,9 +241,9 @@ async function uploadHlsSegmentToHostless(streamId, filename, filePath) {
       body: data,
       signal: AbortSignal.timeout(20_000)
     });
+    const responseBody = await response.text().catch(() => "");
     if (!response.ok) {
-      const detail = await response.text().catch(() => "");
-      throw new Error("Hostless HTTP " + response.status + (detail ? ": " + detail.slice(0, 160) : ""));
+      throw new Error("Hostless HTTP " + response.status + (responseBody ? ": " + responseBody.slice(0, 160) : ""));
     }
     return true;
   })();
