@@ -21,11 +21,12 @@ Servidor padrão: `http://127.0.0.1:18080/`.
 - `/health`: estado do servidor, catálogo e parâmetros HLS.
 - `/catalog.json`: metadados dos vídeos.
 - `/playlist.m3u`: playlist direta, usando `/video/:id`.
+- `/playlist-hls.m3u`: playlist HLS, usando `/hls/:id/index.m3u8`.
 - `/video/:id`: proxy original com encaminhamento de HTTP Range.
 - `/hls/:id/index.m3u8`: HLS gerado sob demanda pelo FFmpeg.
 - `/hls/:id/segment_000000.ts`: segmentos HLS do vídeo.
 
-Para testar HLS, abra no player `http://IP-DO-TERMUX:18080/hls/ID_DO_VIDEO/index.m3u8`.
+Para testar HLS, abra no player `http://IP-DO-TERMUX:18080/hls/ID_DO_VIDEO/index.m3u8` ou carregue a playlist `/playlist-hls.m3u`.
 
 ## Segmentação e cache
 
