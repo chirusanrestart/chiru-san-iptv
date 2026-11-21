@@ -67,3 +67,36 @@ test("removes finished jobs from the runtime registry after retention", async ()
   await runtime.sweepIdle({ now: 100_000, finishedRetentionMs: 1000 });
   assert.equal(runtime.getJob("done"), null);
 });
+
+test("shares one in-flight FFmpeg start for concurrent requests to the same video", async () => {
+  const runtime = new HlsRuntime({ maxJobs: 1 });
+  let starts = 0;
+  let release;
+  const gate = new Promise((resolve) => { release = resolve; });
+  const factory = async () => {
+    starts++;
+    await gate;
+    return { child: { kill() {} }, startedAt: Date.now(), exitCode: null };
+  };
+  const first = runtime.startJob("same-video", factory);
+  const second = runtime.startJob("same-video", factory);
+  await Promise.resolve();
+  assert.equal(starts, 1);
+  release();
+  const [a, b] = await Promise.all([first, second]);
+  assert.equal(a, b);
+  assert.equal(runtime.jobs.size, 1);
+});
+
+test("counts concurrent starts toward the FFmpeg limit", async () => {
+  const runtime = new HlsRuntime({ maxJobs: 1 });
+  let release;
+  const gate = new Promise((resolve) => { release = resolve; });
+  const pending = runtime.startJob("first", async () => {
+    await gate;
+    return { child: { kill() {} }, startedAt: Date.now(), exitCode: null };
+  });
+  await assert.rejects(runtime.startJob("second", async () => ({})), { code: "HLS_LIMIT" });
+  release();
+  await pending;
+});
