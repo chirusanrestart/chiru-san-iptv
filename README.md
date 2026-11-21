@@ -19,6 +19,7 @@ O servidor usa a porta 18080 por padrão. Acesse `http://127.0.0.1:18080/` no pr
 ## Rotas locais
 
 - `/health`: estado do servidor e quantidade de vídeos.
+- `/catalog.json`: IDs e metadados básicos para identificar os vídeos sem expor as URLs de origem.
 - `/playlist.m3u`: playlist M3U com URLs do próprio Termux.
 - `/video/:id`: streaming direto com encaminhamento HTTP Range, necessário para seek.
 
