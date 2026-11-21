@@ -203,6 +203,7 @@ function startHlsJob(id, video, outputDir) {
   });
   child.on("close", (code) => {
     job.exitCode = code;
+    job.closedAt = Date.now();
     if (code !== 0) {
       job.error ||= stderr.trim() || `FFmpeg encerrou com código ${code}`;
       console.error(`❌ FFmpeg para ${id} terminou: ${job.error}`);
@@ -465,7 +466,7 @@ const runtimeSweep = setInterval(() => {
 runtimeSweep.unref?.();
 
 const cachePrune = setInterval(() => {
-  const protectedDirs = [...runtime.jobs.keys()].map((id) => path.dirname(hlsPath(id)));
+  const protectedDirs = [...runtime.jobs.entries()].filter(([, job]) => job.exitCode === null && !job.error).map(([id]) => path.dirname(hlsPath(id)));
   runtime.pruneCache(HLS_DIR, { maxAgeMs: 86_400_000, protectedDirs }).then((removed) => {
     if (removed) console.log(`🧹 Cache HLS antigo removido: ${removed} diretório(s).`);
   }).catch((error) => console.warn("⚠️ Limpeza do cache HLS falhou:", error.message));
