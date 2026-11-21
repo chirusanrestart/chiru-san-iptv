@@ -7,7 +7,8 @@
   "scripts": {
     "start": "node server.mjs",
     "catalog": "node catalogar.mjs",
-    "tunnel": "node tunnel.mjs"
+    "tunnel": "node tunnel.mjs",
+    "test": "node --test"
   },
   "engines": {
     "node": ">=20"
