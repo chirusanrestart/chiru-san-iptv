@@ -470,7 +470,7 @@ server.listen({ host: HOST, port: PORT, ipv6Only: false }, () => {
   console.log("📺 CHIRU-SAN IPTV | TERMUX");
   console.log(`🌐 Escutando em http://[::]:${PORT}`);
   console.log(`🌐 Relay público: ${TUNNEL_RELAY_URL}`);
-  console.log(`📺 Playlist HLS pública: ${HOSTLESS_AGENT_TOKEN ? TUNNEL_RELAY_URL + "/iptv/playlist-hls.m3u8" : "configure HOSTLESS_AGENT_TOKEN no Termux e AGENT_TOKEN no Hostless"}`);
+  console.log(`📺 Playlist HLS pública: ${HOSTLESS_AGENT_TOKEN ? HOSTLESS_CACHE_URL + "/iptv/playlist-hls.m3u8" : "configure HOSTLESS_AGENT_TOKEN no Termux e AGENT_TOKEN no Hostless"}`);
   if (HOSTLESS_AGENT_TOKEN) startHostlessAgent({ port: PORT, relayUrl: HOSTLESS_CACHE_URL, token: HOSTLESS_AGENT_TOKEN, workers: HOSTLESS_AGENT_WORKERS });
   console.log(`📡 Tunnel linear legado: ${TUNNEL_RECEIVER_URL || "não iniciado; HLS usa o tunnel reverso automático"}`);
   console.log(`📡 Playlist direta local: http://127.0.0.1:${PORT}/playlist.m3u`);
