@@ -31,9 +31,11 @@ Para testar HLS, abra no player `http://IP-DO-TERMUX:18080/hls/ID_DO_VIDEO/index
 
 ## Segmentação e cache
 
-O FFmpeg usa `-c copy` para copiar os fluxos de áudio e vídeo sem reencodificação. A duração de 4 segundos é um alvo: os cortes reais dependem dos keyframes presentes no vídeo e podem ficar maiores. A leitura é limitada à velocidade normal do vídeo (`-re`) para o FFmpeg não consumir a origem inteira depressa demais. A janela padrão mantém aproximadamente 180 segundos de segmentos, configurável por `HLS_CACHE_SECONDS`. Como é uma janela deslizante, voltar para trechos antigos pode deixar de funcionar depois que os segmentos saírem do cache. O servidor Termux mantém essa janela local e, quando entrega a playlist HLS, sincroniza os segmentos referenciados com o cache RAM do Hostless. A playlist recebida pelo player aponta diretamente para `https://melissa-iptv.hostless.app/cache/...`; assim, o Hostless entrega os bytes e atende requisições HTTP Range sem transformar os segmentos em um fluxo contínuo.
+O FFmpeg usa `-c copy` para copiar os fluxos de áudio e vídeo sem reencodificação. A duração de 4 segundos é um alvo: os cortes reais dependem dos keyframes presentes no vídeo e podem ficar maiores. A leitura é limitada à velocidade normal do vídeo (`-re`) para o FFmpeg não consumir a origem inteira depressa demais e esvaziar a janela deslizante antes de o player acompanhar. A janela padrão mantém aproximadamente 180 segundos de segmentos, configurável por `HLS_CACHE_SECONDS`. Como é uma janela deslizante, voltar para trechos antigos pode deixar de funcionar depois que os segmentos saírem do cache.
 
-A cópia de streams não ganha muito com multithread de codificação, pois não há codificação. O trabalho é limitado principalmente pela leitura da origem, rede e gravação dos segmentos. O servidor inicia um único processo FFmpeg por vídeo enquanto o processo está ativo.
+O FFmpeg continua sendo um produtor por vídeo: ele demuxa a origem uma vez e gera os segmentos em sequência, preservando a ordem HLS. Depois disso, os uploads ao Hostless são assíncronos e passam por uma fila FIFO com vários workers. Os uploads podem terminar em tempos diferentes, mas a playlist nunca muda a ordem dos segmentos. Enquanto um segmento ainda está na fila, a playlist mantém o endereço local como fallback; depois da confirmação do upload, as próximas atualizações passam a apontar diretamente para o cache RAM do Hostless. Isso evita que a resposta da playlist fique esperando todos os uploads.
+
+A cópia de streams não ganha muito com multithread de codificação, pois não há codificação. Em vez de abrir vários FFmpeg para reler a mesma origem, o servidor mantém um processo FFmpeg por vídeo e paraleliza a etapa independente de publicação dos segmentos. Assim, evita leitura duplicada e disputa desnecessária pelo armazenamento.
 
 **Compatibilidade:** stream copy não converte codecs. HLS MPEG-TS funciona melhor quando a origem contém vídeo H.264 e áudio AAC. Se a combinação de codecs/container não for compatível com MPEG-TS, o FFmpeg pode falhar; nesse caso, o endpoint direto `/video/:id` continua disponível.
 
@@ -77,6 +79,7 @@ Edite `.env`:
 - `HLS_CACHE_SECONDS=180`: tamanho temporal aproximado da janela de cache.
 - `FFMPEG_PATH=ffmpeg`: executável do FFmpeg.
 - `HLS_MAX_JOBS=2`: limite de processos FFmpeg simultâneos.
+- `HOSTLESS_UPLOAD_WORKERS=3`: quantidade de uploads de segmentos simultâneos (1 a 8).
 - `HLS_IDLE_MS=90000`: encerra uma geração HLS sem pedidos após 90 segundos.
 
 O endpoint `/stats` mostra as métricas locais. Processos HLS sem requisições por 90 segundos são encerrados; registros de processos finalizados expiram após uma hora; diretórios HLS sem atividade por mais de 24 horas são removidos periodicamente. Sessões ativas protegem seus processos da limpeza automática.
