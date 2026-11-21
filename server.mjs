@@ -206,6 +206,20 @@ const server = http.createServer(async (req, res) => {
     return res.end(html);
   }
 
+  if (url.pathname === "/catalog.json") {
+    const catalog = videos.map((video, index) => ({
+      id: videoId(video, index),
+      title: video.title || video.name || `Vídeo ${index + 1}`,
+      duration: video.duration || null,
+      width: video.width || null,
+      height: video.height || null,
+      poster: video.poster || null
+    }));
+    const body = JSON.stringify(catalog);
+    res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Content-Length": Buffer.byteLength(body), "Cache-Control": "no-store" });
+    return res.end(body);
+  }
+
   if (url.pathname === "/playlist.m3u") {
     const playlist = makePlaylist(req);
     res.writeHead(200, { "Content-Type": "audio/x-mpegurl; charset=utf-8", "Content-Length": Buffer.byteLength(playlist), "Cache-Control": "no-store" });
