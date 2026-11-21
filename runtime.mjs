@@ -49,10 +49,14 @@ export class HlsRuntime {
     return total;
   }
 
-  async sweepIdle({ idleMs = 90_000, now = Date.now() } = {}) {
+  async sweepIdle({ idleMs = 90_000, finishedRetentionMs = 3_600_000, now = Date.now() } = {}) {
     const stopped = [];
     for (const [id, job] of this.jobs) {
-      if (job.exitCode !== null || job.error || (this.sessions.get(id) || 0) > 0) continue;
+      if ((this.sessions.get(id) || 0) > 0) continue;
+      if (job.exitCode !== null || job.error) {
+        if (now - (job.closedAt || job.lastActivityAt || job.startedAt || now) >= finishedRetentionMs) this.jobs.delete(id);
+        continue;
+      }
       if (now - (job.lastActivityAt || job.startedAt || now) < idleMs) continue;
       job.child.kill("SIGTERM");
       this.jobs.delete(id);
