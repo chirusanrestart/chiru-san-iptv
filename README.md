@@ -37,6 +37,18 @@ A cópia de streams não ganha muito com multithread de codificação, pois não
 
 **Compatibilidade:** stream copy não converte codecs. HLS MPEG-TS funciona melhor quando a origem contém vídeo H.264 e áudio AAC. Se a combinação de codecs/container não for compatível com MPEG-TS, o FFmpeg pode falhar; nesse caso, o endpoint direto `/video/:id` continua disponível.
 
+## Playlist pública pelo Hostless
+
+Quando `HOSTLESS_AGENT_TOKEN` no Termux corresponde ao `AGENT_TOKEN` configurado no app Hostless, o próprio `npm start` conecta o servidor ao tunnel reverso. O player pode carregar diretamente:
+
+```
+https://melissa-iptv.hostless.app/iptv/playlist-hls.m3u8
+```
+
+O Hostless encaminha playlist e manifests ao Termux. Os segmentos HLS continuam sendo publicados no cache RAM do Hostless e a playlist aponta para esses segmentos públicos. O player não precisa conhecer o IP do Termux, executar comandos, informar IDs ou enviar tokens.
+
+Configure a mesma chave aleatória em `HOSTLESS_AGENT_TOKEN` no `.env` do Termux e `AGENT_TOKEN` nas variáveis do app Hostless. Sem a chave correspondente, a URL pública retorna HTTP 503 e o servidor mantém as rotas locais disponíveis.
+
 ## Catálogo
 
 O catálogo é atualizado a cada 5 minutos por padrão e fica em `data/videos.json`. Se a atualização falhar, o último catálogo válido permanece em uso. Atualização manual:
