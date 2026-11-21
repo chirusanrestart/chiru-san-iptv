@@ -169,7 +169,7 @@ function startHlsJob(id, video, outputDir) {
   const args = [
     "-hide_banner", "-loglevel", "warning", "-nostdin", "-y",
     "-user_agent", "Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 Chrome/151.0.0.0 Mobile Safari/537.36",
-    "-i", sourceUrl,
+    "-re", "-i", sourceUrl,
     "-map", "0:v:0?", "-map", "0:a:0?",
     "-c", "copy", "-sn", "-dn",
     "-f", "hls",
