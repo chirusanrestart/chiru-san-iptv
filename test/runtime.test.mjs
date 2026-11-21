@@ -100,3 +100,13 @@ test("counts concurrent starts toward the FFmpeg limit", async () => {
   release();
   await pending;
 });
+
+test("does not expose private video identifiers or FFmpeg error details in stats", async () => {
+  const runtime = new HlsRuntime();
+  runtime.setJob("private-video-id", { child: { kill() {} }, startedAt: Date.now(), exitCode: null, error: "signed-source-url-secret" });
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "iptv-stats-"));
+  const stats = JSON.stringify(await runtime.stats(dir));
+  assert.equal(stats.includes("private-video-id"), false);
+  assert.equal(stats.includes("signed-source-url-secret"), false);
+  await fs.rm(dir, { recursive: true, force: true });
+});
