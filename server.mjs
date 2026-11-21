@@ -94,7 +94,7 @@ function sendText(res, status, message) {
   res.end(message);
 }
 
-function makePlaylist(req) {
+function makePlaylist(req, mode = "direct") {
   const host = req.headers.host || `localhost:${PORT}`;
   const lines = ["#EXTM3U"];
   videos.forEach((video, index) => {
@@ -102,7 +102,7 @@ function makePlaylist(req) {
     const title = String(video.title || video.name || `Vídeo ${index + 1}`).replace(/[\r\n]/g, " ");
     const duration = Number(video.duration);
     lines.push(`#EXTINF:${Number.isFinite(duration) && duration > 0 ? Math.floor(duration) : -1},${title}`);
-    lines.push(`http://${host}/video/${id}`);
+    lines.push(mode === "hls" ? `http://${host}/hls/${id}/index.m3u8` : `http://${host}/video/${id}`);
   });
   return lines.join("\n") + "\n";
 }
@@ -223,6 +223,10 @@ async function waitForPlaylist(id, job, timeoutMs = 30_000) {
 
 async function serveHlsPlaylist(req, res, id, video) {
   let job = hlsJobs.get(id);
+  if (job && (job.error || (job.exitCode !== null && job.exitCode !== 0))) {
+    hlsJobs.delete(id);
+    job = null;
+  }
   const outputDir = path.dirname(hlsPath(id));
   if (!job) {
     try {
@@ -300,7 +304,7 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (url.pathname === "/") {
-    const html = `<!doctype html><html lang="pt-BR"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Chiru-san IPTV</title><h1>📺 Chiru-san IPTV</h1><p>Servidor Termux online.</p><p>Vídeos: ${videos.length}</p><p><a href="/playlist.m3u">Playlist direta</a></p><p><a href="/health">Health</a></p></html>`;
+    const html = `<!doctype html><html lang="pt-BR"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Chiru-san IPTV</title><h1>📺 Chiru-san IPTV</h1><p>Servidor Termux online.</p><p>Vídeos: ${videos.length}</p><p><a href="/playlist.m3u">Playlist direta</a></p><p><a href="/playlist-hls.m3u">Playlist HLS</a></p><p><a href="/health">Health</a></p></html>`;
     res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Content-Length": Buffer.byteLength(html) });
     return res.end(html);
   }
@@ -316,8 +320,8 @@ const server = http.createServer(async (req, res) => {
     return res.end(body);
   }
 
-  if (url.pathname === "/playlist.m3u") {
-    const playlist = makePlaylist(req);
+  if (url.pathname === "/playlist.m3u" || url.pathname === "/playlist-hls.m3u") {
+    const playlist = makePlaylist(req, url.pathname === "/playlist-hls.m3u" ? "hls" : "direct");
     res.writeHead(200, { "Content-Type": "audio/x-mpegurl; charset=utf-8", "Content-Length": Buffer.byteLength(playlist), "Cache-Control": "no-store" });
     return res.end(playlist);
   }
