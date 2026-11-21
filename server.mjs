@@ -225,8 +225,7 @@ const server = http.createServer(async (req, res) => {
 });
 
 await loadCatalogFromDisk();
-if (videos.length === 0) await updateCatalog();
-else updateCatalog();
+updateCatalog();
 
 server.listen({ host: HOST, port: PORT, ipv6Only: false }, () => {
   console.log("");
