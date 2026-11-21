@@ -383,7 +383,18 @@ const server = http.createServer(async (req, res) => {
     }));
   }
 
-  if (url.pathname === "/stats") {\n    try {\n      const stats = await runtime.stats(HLS_DIR);\n      stats.limits = { maxHlsJobs: MAX_HLS_JOBS, idleStopSeconds: Math.floor(HLS_IDLE_MS / 1000), cacheWindowSeconds: CACHE_SECONDS };\n      res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });\n      return res.end(JSON.stringify(stats));\n    } catch (error) {\n      return sendText(res, 500, `Erro coletando estatísticas: ${error.message}`);\n    }\n  }\n\n  if (url.pathname === "/") {
+  if (url.pathname === "/stats") {
+    try {
+      const stats = await runtime.stats(HLS_DIR);
+      stats.limits = { maxHlsJobs: MAX_HLS_JOBS, idleStopSeconds: Math.floor(HLS_IDLE_MS / 1000), cacheWindowSeconds: CACHE_SECONDS };
+      res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+      return res.end(JSON.stringify(stats));
+    } catch (error) {
+      return sendText(res, 500, `Erro coletando estatísticas: ${error.message}`);
+    }
+  }
+
+  if (url.pathname === "/") {
     const html = `<!doctype html><html lang="pt-BR"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Chiru-san IPTV</title><h1>📺 Chiru-san IPTV</h1><p>Servidor Termux online.</p><p>Vídeos: ${videos.length}</p><p><a href="/playlist.m3u">Playlist direta</a></p><p><a href="/playlist-hls.m3u">Playlist HLS</a></p><p><a href="/health">Health</a></p></html>`;
     res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Content-Length": Buffer.byteLength(html) });
     return res.end(html);
@@ -413,6 +424,9 @@ const server = http.createServer(async (req, res) => {
     catch { return sendText(res, 400, "ID inválido."); }
     const video = findVideo(id);
     if (!video) return sendText(res, 404, "Vídeo não encontrado.");
+    const releaseSession = runtime.acquire(id);
+    res.once("close", releaseSession);
+    res.once("finish", releaseSession);
     if (hlsMatch[2] === "index.m3u8") return serveHlsPlaylist(req, res, id, video);
     return serveHlsSegment(req, res, id, hlsMatch[2]);
   }
@@ -443,7 +457,9 @@ server.listen({ host: HOST, port: PORT, ipv6Only: false }, () => {
   console.log(`🎬 FFmpeg: ${FFMPEG}; segmentos-alvo ${SEGMENT_SECONDS}s; cache ${CACHE_SECONDS}s`);
 });
 
-setInterval(updateCatalog, REFRESH_MS);\n\nconst runtimeSweep = setInterval(() => {
+setInterval(updateCatalog, REFRESH_MS);
+
+const runtimeSweep = setInterval(() => {
   runtime.sweepIdle({ idleMs: HLS_IDLE_MS }).catch((error) => console.warn("⚠️ Limpeza de sessões HLS falhou:", error.message));
 }, 30_000);
 runtimeSweep.unref?.();
