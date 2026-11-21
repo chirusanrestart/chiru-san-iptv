@@ -43,6 +43,11 @@ const MAX_HLS_JOBS = Math.max(1, Number(process.env.HLS_MAX_JOBS || 2));
 const HLS_IDLE_MS = Math.max(30_000, Number(process.env.HLS_IDLE_MS || 90_000));
 const HOSTLESS_CACHE_ENABLED = String(process.env.HOSTLESS_CACHE_ENABLED || "true").toLowerCase() !== "false";
 const HOSTLESS_CACHE_URL = (process.env.HOSTLESS_CACHE_URL || process.env.TUNNEL_RELAY_URL || "https://melissa-iptv.hostless.app").replace(/\/+$/, "");
+const TUNNEL_RELAY_URL = (process.env.TUNNEL_RELAY_URL || "https://melissa-iptv.hostless.app").replace(/\/+$/, "");
+const TUNNEL_STREAM_ID = String(process.env.TUNNEL_STREAM_ID || "").trim();
+const TUNNEL_RECEIVER_URL = TUNNEL_STREAM_ID
+  ? new URL("/receber/" + encodeURIComponent(TUNNEL_STREAM_ID), TUNNEL_RELAY_URL).href
+  : "";
 const HOSTLESS_CACHE_TTL_SECONDS = Math.min(3600, Math.max(60, Number(process.env.HOSTLESS_CACHE_TTL_SECONDS || CACHE_SECONDS + 120) || 300));
 const cacheUploadsInFlight = new Map();
 
@@ -398,7 +403,10 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (url.pathname === "/") {
-    const html = `<!doctype html><html lang="pt-BR"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Chiru-san IPTV</title><h1>📺 Chiru-san IPTV</h1><p>Servidor Termux online.</p><p>Vídeos: ${videos.length}</p><p><a href="/playlist.m3u">Playlist direta</a></p><p><a href="/playlist-hls.m3u">Playlist HLS</a></p><p><a href="/health">Health</a></p></html>`;
+    const tunnelStatus = TUNNEL_RECEIVER_URL
+      ? `<p>📡 Tunnel receiver: <a href="${TUNNEL_RECEIVER_URL}">${TUNNEL_RECEIVER_URL}</a></p>`
+      : `<p>📡 Tunnel receiver: gerado por vídeo ao executar <code>npm run tunnel -- ID</code>.</p>`;
+    const html = `<!doctype html><html lang="pt-BR"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Chiru-san IPTV</title><h1>📺 Chiru-san IPTV</h1><p>Servidor Termux online.</p><p>🌐 Relay público: <a href="${TUNNEL_RELAY_URL}">${TUNNEL_RELAY_URL}</a></p>${tunnelStatus}<p>Vídeos: ${videos.length}</p><p><a href="/playlist.m3u">Playlist direta</a></p><p><a href="/playlist-hls.m3u">Playlist HLS</a></p><p><a href="/health">Health</a></p></html>`;
     res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Content-Length": Buffer.byteLength(html) });
     return res.end(html);
   }
@@ -453,8 +461,10 @@ server.listen({ host: HOST, port: PORT, ipv6Only: false }, () => {
   console.log("");
   console.log("📺 CHIRU-SAN IPTV | TERMUX");
   console.log(`🌐 Escutando em http://[::]:${PORT}`);
-  console.log(`📡 Playlist direta: http://IP-DO-TERMUX:${PORT}/playlist.m3u`);
-  console.log(`🎞️ HLS por vídeo: http://IP-DO-TERMUX:${PORT}/hls/ID/index.m3u8`);
+  console.log(`🌐 Relay público: ${TUNNEL_RELAY_URL}`);
+  console.log(`📡 Tunnel receiver: ${TUNNEL_RECEIVER_URL || "gerado por vídeo: npm run tunnel -- <id>"}`);
+  console.log(`📡 Playlist direta local: http://127.0.0.1:${PORT}/playlist.m3u`);
+  console.log(`🎞️ HLS local por vídeo: http://127.0.0.1:${PORT}/hls/ID/index.m3u8`);
   console.log(`🩺 Health: http://IP-DO-TERMUX:${PORT}/health`);
   console.log(`🔄 Catálogo: a cada ${Math.round(REFRESH_MS / 60000)} minuto(s)`);
   console.log(`🎬 FFmpeg: ${FFMPEG}; segmentos-alvo ${SEGMENT_SECONDS}s; cache ${CACHE_SECONDS}s`);
