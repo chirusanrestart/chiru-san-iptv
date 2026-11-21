@@ -190,7 +190,6 @@ function startHlsJob(id, video, outputDir) {
 
   const child = spawn(FFMPEG, args, { stdio: ["ignore", "ignore", "pipe"] });
   const job = { child, startedAt: Date.now(), exitCode: null, error: null };
-  runtime.setJob(id, job);
 
   let stderr = "";
   child.stderr.setEncoding("utf8");
@@ -309,12 +308,15 @@ async function serveHlsPlaylist(req, res, id, video) {
   const outputDir = path.dirname(hlsPath(id));
   if (!job) {
     try {
-      await fs.mkdir(HLS_DIR, { recursive: true });
-      await fs.rm(outputDir, { recursive: true, force: true });
-      await fs.mkdir(outputDir, { recursive: true });
-      job = startHlsJob(id, video, outputDir);
+      job = await runtime.startJob(id, async () => {
+        await fs.mkdir(HLS_DIR, { recursive: true });
+        await fs.rm(outputDir, { recursive: true, force: true });
+        await fs.mkdir(outputDir, { recursive: true });
+        return startHlsJob(id, video, outputDir);
+      });
     } catch (error) {
-      return sendText(res, 500, `Não foi possível iniciar o FFmpeg: ${error.message}`);
+      const status = error.code === "HLS_LIMIT" ? 503 : 500;
+      return sendText(res, status, `Não foi possível iniciar o FFmpeg: ${error.message}`);
     }
   }
 
