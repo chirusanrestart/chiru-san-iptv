@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { refreshCatalog } from "./catalogar.mjs";
+import { HlsRuntime } from "./runtime.mjs";
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.join(ROOT, "data");
@@ -38,6 +39,8 @@ const SEGMENT_SECONDS = Math.max(2, Math.min(10, Number(process.env.HLS_SEGMENT_
 const CACHE_SECONDS = Math.max(SEGMENT_SECONDS * 3, Number(process.env.HLS_CACHE_SECONDS || 180));
 const MAX_SEGMENTS = Math.max(3, Math.ceil(CACHE_SECONDS / SEGMENT_SECONDS));
 const FFMPEG = process.env.FFMPEG_PATH || "ffmpeg";
+const MAX_HLS_JOBS = Math.max(1, Number(process.env.HLS_MAX_JOBS || 2));
+const HLS_IDLE_MS = Math.max(30_000, Number(process.env.HLS_IDLE_MS || 90_000));
 const HOSTLESS_CACHE_ENABLED = String(process.env.HOSTLESS_CACHE_ENABLED || "true").toLowerCase() !== "false";
 const HOSTLESS_CACHE_URL = (process.env.HOSTLESS_CACHE_URL || process.env.TUNNEL_RELAY_URL || "https://melissa-iptv.hostless.app").replace(/\/+$/, "");
 const HOSTLESS_CACHE_TTL_SECONDS = Math.min(3600, Math.max(60, Number(process.env.HOSTLESS_CACHE_TTL_SECONDS || CACHE_SECONDS + 120) || 300));
@@ -45,7 +48,7 @@ const cacheUploadsInFlight = new Map();
 
 let videos = [];
 let refreshInProgress = false;
-const hlsJobs = new Map();
+const runtime = new HlsRuntime({ maxJobs: MAX_HLS_JOBS });
 
 async function loadCatalogFromDisk() {
   try {
@@ -187,7 +190,7 @@ function startHlsJob(id, video, outputDir) {
 
   const child = spawn(FFMPEG, args, { stdio: ["ignore", "ignore", "pipe"] });
   const job = { child, startedAt: Date.now(), exitCode: null, error: null };
-  hlsJobs.set(id, job);
+  runtime.setJob(id, job);
 
   let stderr = "";
   child.stderr.setEncoding("utf8");
@@ -297,9 +300,9 @@ async function publishHlsSegmentsToHostless(id, job, playlistText) {
 }
 
 async function serveHlsPlaylist(req, res, id, video) {
-  let job = hlsJobs.get(id);
+  let job = runtime.getJob(id);
   if (job && (job.error || (job.exitCode !== null && job.exitCode !== 0))) {
-    hlsJobs.delete(id);
+    runtime.deleteJob(id);
     job = null;
   }
   const outputDir = path.dirname(hlsPath(id));
@@ -376,11 +379,11 @@ const server = http.createServer(async (req, res) => {
     return res.end(JSON.stringify({
       ok: true, service: "chiru-san-iptv", platform: "termux",
       videos: videos.length, refreshing: refreshInProgress,
-      ffmpegJobs: hlsJobs.size, hlsSegmentSeconds: SEGMENT_SECONDS, hlsCacheSeconds: CACHE_SECONDS, hostlessCacheEnabled: HOSTLESS_CACHE_ENABLED
+      ffmpegJobs: runtime.jobs.size, hlsSegmentSeconds: SEGMENT_SECONDS, hlsCacheSeconds: CACHE_SECONDS, maxHlsJobs: MAX_HLS_JOBS, hostlessCacheEnabled: HOSTLESS_CACHE_ENABLED
     }));
   }
 
-  if (url.pathname === "/") {
+  if (url.pathname === "/stats") {\n    try {\n      const stats = await runtime.stats(HLS_DIR);\n      stats.limits = { maxHlsJobs: MAX_HLS_JOBS, idleStopSeconds: Math.floor(HLS_IDLE_MS / 1000), cacheWindowSeconds: CACHE_SECONDS };\n      res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });\n      return res.end(JSON.stringify(stats));\n    } catch (error) {\n      return sendText(res, 500, `Erro coletando estatísticas: ${error.message}`);\n    }\n  }\n\n  if (url.pathname === "/") {
     const html = `<!doctype html><html lang="pt-BR"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Chiru-san IPTV</title><h1>📺 Chiru-san IPTV</h1><p>Servidor Termux online.</p><p>Vídeos: ${videos.length}</p><p><a href="/playlist.m3u">Playlist direta</a></p><p><a href="/playlist-hls.m3u">Playlist HLS</a></p><p><a href="/health">Health</a></p></html>`;
     res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Content-Length": Buffer.byteLength(html) });
     return res.end(html);
@@ -440,7 +443,7 @@ server.listen({ host: HOST, port: PORT, ipv6Only: false }, () => {
   console.log(`🎬 FFmpeg: ${FFMPEG}; segmentos-alvo ${SEGMENT_SECONDS}s; cache ${CACHE_SECONDS}s`);
 });
 
-setInterval(updateCatalog, REFRESH_MS);
+setInterval(updateCatalog, REFRESH_MS);\n\nconst runtimeSweep = setInterval(() => {\n  runtime.sweepIdle({ idleMs: HLS_IDLE_MS }).catch((error) => console.warn("⚠️ Limpeza de sessões HLS falhou:", error.message));\n}, 30_000);\nruntimeSweep.unref?.();
 
 server.on("error", (error) => {
   console.error("❌ Erro no servidor:", error);
@@ -450,7 +453,7 @@ server.on("error", (error) => {
 for (const signal of ["SIGINT", "SIGTERM"]) {
   process.on(signal, () => {
     console.log(`\n🛑 Recebido ${signal}; encerrando servidor...`);
-    for (const job of hlsJobs.values()) job.child.kill("SIGTERM");
+    for (const job of runtime.jobs.values()) job.child.kill("SIGTERM");
     server.close(() => process.exit(0));
   });
 }
