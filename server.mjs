@@ -18,7 +18,7 @@ function loadEnv() {
     for (const rawLine of content.split(/\r?\n/)) {
       const line = rawLine.trim();
       if (!line || line.startsWith("#")) continue;
-      const match = line.match(/^(?:export\\s+)?([A-Za-z_][A-Za-z0-9_]*)\\s*=\\s*(.*)$/);
+      const match = line.match(/^(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/);
       if (!match || process.env[match[1]] !== undefined) continue;
       let value = match[2].trim();
       if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) value = value.slice(1, -1);
@@ -76,7 +76,7 @@ function findVideo(id) {
 
 function videoUrl(video) {
   const value = video?.url || video?.videoUrl || video?.playbackUrl || video?.directUrl || video?.src || video?.link;
-  if (typeof value !== "string" || !/^https?:\\/\\//i.test(value)) return null;
+  if (typeof value !== "string" || !/^https?:\/\//i.test(value)) return null;
   return value.startsWith("http://") ? `https://${value.slice(7)}` : value;
 }
 
@@ -99,12 +99,12 @@ function makePlaylist(req) {
   const lines = ["#EXTM3U"];
   videos.forEach((video, index) => {
     const id = encodeURIComponent(videoId(video, index));
-    const title = String(video.title || video.name || `Vídeo ${index + 1}`).replace(/[\\r\\n]/g, " ");
+    const title = String(video.title || video.name || `Vídeo ${index + 1}`).replace(/[\r\n]/g, " ");
     const duration = Number(video.duration);
     lines.push(`#EXTINF:${Number.isFinite(duration) && duration > 0 ? Math.floor(duration) : -1},${title}`);
     lines.push(`http://${host}/video/${id}`);
   });
-  return lines.join("\\n") + "\\n";
+  return lines.join("\n") + "\n";
 }
 
 async function streamVideo(req, res, video) {
@@ -252,7 +252,7 @@ async function serveHlsPlaylist(req, res, id, video) {
 }
 
 async function serveHlsSegment(req, res, id, filename) {
-  if (!/^segment_\\d{6}\\.ts$/.test(filename)) return sendText(res, 400, "Nome de segmento inválido.");
+  if (!/^segment_\d{6}\.ts$/.test(filename)) return sendText(res, 400, "Nome de segmento inválido.");
   const target = hlsPath(id, filename);
   let stat;
   try {
@@ -322,7 +322,7 @@ const server = http.createServer(async (req, res) => {
     return res.end(playlist);
   }
 
-  const hlsMatch = url.pathname.match(/^\\/hls\\/([^/]+)\\/([^/]+)$/);
+  const hlsMatch = url.pathname.match(/^\/hls\/([^/]+)\/([^/]+)$/);
   if (hlsMatch) {
     let id;
     try { id = decodeURIComponent(hlsMatch[1]); }
@@ -368,7 +368,7 @@ server.on("error", (error) => {
 
 for (const signal of ["SIGINT", "SIGTERM"]) {
   process.on(signal, () => {
-    console.log(`\\n🛑 Recebido ${signal}; encerrando servidor...`);
+    console.log(`\n🛑 Recebido ${signal}; encerrando servidor...`);
     for (const job of hlsJobs.values()) job.child.kill("SIGTERM");
     server.close(() => process.exit(0));
   });
