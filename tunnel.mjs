@@ -1,5 +1,24 @@
+import fs from "node:fs/promises";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import http from "node:http";
 import https from "node:https";
+
+const ROOT = path.dirname(fileURLToPath(import.meta.url));
+try {
+  const envText = await fs.readFile(path.join(ROOT, ".env"), "utf8");
+  for (const rawLine of envText.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith("#")) continue;
+    const match = line.match(/^(?:export\\s+)?([A-Za-z_][A-Za-z0-9_]*)\\s*=\\s*(.*)$/);
+    if (!match || process.env[match[1]] !== undefined) continue;
+    let value = match[2].trim();
+    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) value = value.slice(1, -1);
+    process.env[match[1]] = value;
+  }
+} catch (error) {
+  if (error.code !== "ENOENT") throw error;
+}
 
 const [videoIdArg] = process.argv.slice(2);
 if (!videoIdArg) {
@@ -26,7 +45,7 @@ const relayTransport = relayUrl.protocol === "https:" ? https : http;
 console.log("📡 Chiru-san IPTV Tunnel");
 console.log(`🎬 Origem Termux: ${sourceUrl.href}`);
 console.log(`🌐 Player/receiver: ${receiverUrl.href}`);
-console.log("⏳ Aguardando o player conectar ao receiver...");
+console.log("⏳ Abra a URL receiver no player para iniciar a entrega dos bytes.");
 
 let uploadRequest;
 let sourceRequest;
