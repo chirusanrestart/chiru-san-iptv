@@ -38,6 +38,10 @@ const SEGMENT_SECONDS = Math.max(2, Math.min(10, Number(process.env.HLS_SEGMENT_
 const CACHE_SECONDS = Math.max(SEGMENT_SECONDS * 3, Number(process.env.HLS_CACHE_SECONDS || 180));
 const MAX_SEGMENTS = Math.max(3, Math.ceil(CACHE_SECONDS / SEGMENT_SECONDS));
 const FFMPEG = process.env.FFMPEG_PATH || "ffmpeg";
+const HOSTLESS_CACHE_ENABLED = String(process.env.HOSTLESS_CACHE_ENABLED || "true").toLowerCase() !== "false";
+const HOSTLESS_CACHE_URL = (process.env.HOSTLESS_CACHE_URL || process.env.TUNNEL_RELAY_URL || "https://melissa-iptv.hostless.app").replace(/\/+$/, "");
+const HOSTLESS_CACHE_TTL_SECONDS = Math.min(3600, Math.max(60, Number(process.env.HOSTLESS_CACHE_TTL_SECONDS || CACHE_SECONDS + 120) || 300));
+const cacheUploadsInFlight = new Map();
 
 let videos = [];
 let refreshInProgress = false;
@@ -221,6 +225,77 @@ async function waitForPlaylist(id, job, timeoutMs = 30_000) {
   return false;
 }
 
+async function uploadHlsSegmentToHostless(streamId, filename, filePath) {
+  const key = streamId + "/" + filename;
+  if (cacheUploadsInFlight.has(key)) return cacheUploadsInFlight.get(key);
+
+  const upload = (async () => {
+    const data = await fs.readFile(filePath);
+    const target = new URL("/cache/" + encodeURIComponent(streamId) + "/" + encodeURIComponent(filename), HOSTLESS_CACHE_URL);
+    const response = await fetch(target, {
+      method: "POST",
+      headers: {
+        "Content-Type": "video/mp2t",
+        "X-Cache-TTL": String(HOSTLESS_CACHE_TTL_SECONDS)
+      },
+      body: data,
+      signal: AbortSignal.timeout(20_000)
+    });
+    if (!response.ok) {
+      const detail = await response.text().catch(() => "");
+      throw new Error("Hostless HTTP " + response.status + (detail ? ": " + detail.slice(0, 160) : ""));
+    }
+    return true;
+  })();
+
+  cacheUploadsInFlight.set(key, upload);
+  try {
+    return await upload;
+  } finally {
+    if (cacheUploadsInFlight.get(key) === upload) cacheUploadsInFlight.delete(key);
+  }
+}
+
+async function publishHlsSegmentsToHostless(id, job, playlistText) {
+  if (!HOSTLESS_CACHE_ENABLED) return playlistText;
+
+  const streamId = cacheKey(id) + "_" + job.startedAt.toString(36);
+  const listUrl = new URL("/cache/" + encodeURIComponent(streamId), HOSTLESS_CACHE_URL);
+  let available;
+
+  try {
+    const response = await fetch(listUrl, { signal: AbortSignal.timeout(12_000) });
+    if (!response.ok) throw new Error("Hostless HTTP " + response.status);
+    const data = await response.json();
+    available = new Set(Array.isArray(data.segments) ? data.segments.map((segment) => segment.id) : []);
+  } catch (error) {
+    console.warn("⚠️ Hostless indisponível; usando segmentos locais:", error.message);
+    return playlistText;
+  }
+
+  const lines = playlistText.split(/\r?\n/);
+  for (let index = 0; index < lines.length; index += 1) {
+    const filename = lines[index].trim();
+    if (!/^segment_\d{6}\.ts$/.test(filename)) continue;
+
+    if (!available.has(filename)) {
+      try {
+        await uploadHlsSegmentToHostless(streamId, filename, hlsPath(id, filename));
+        available.add(filename);
+      } catch (error) {
+        console.warn("⚠️ Não foi possível publicar " + filename + " no Hostless:", error.message);
+        continue;
+      }
+    }
+
+    if (available.has(filename)) {
+      lines[index] = new URL("/cache/" + encodeURIComponent(streamId) + "/" + encodeURIComponent(filename), HOSTLESS_CACHE_URL).href;
+    }
+  }
+
+  return lines.join("\n");
+}
+
 async function serveHlsPlaylist(req, res, id, video) {
   let job = hlsJobs.get(id);
   if (job && (job.error || (job.exitCode !== null && job.exitCode !== 0))) {
@@ -242,7 +317,9 @@ async function serveHlsPlaylist(req, res, id, video) {
   const ready = await waitForPlaylist(id, job);
   if (!ready) return sendText(res, 502, job.error || "FFmpeg ainda não conseguiu gerar a playlist HLS.");
   try {
-    const body = await fs.readFile(hlsPath(id));
+    const localPlaylist = await fs.readFile(hlsPath(id), "utf8");
+    const publishedPlaylist = await publishHlsSegmentsToHostless(id, job, localPlaylist);
+    const body = Buffer.from(publishedPlaylist);
     res.writeHead(200, {
       "Content-Type": "application/vnd.apple.mpegurl",
       "Content-Length": body.length,
@@ -299,7 +376,7 @@ const server = http.createServer(async (req, res) => {
     return res.end(JSON.stringify({
       ok: true, service: "chiru-san-iptv", platform: "termux",
       videos: videos.length, refreshing: refreshInProgress,
-      ffmpegJobs: hlsJobs.size, hlsSegmentSeconds: SEGMENT_SECONDS, hlsCacheSeconds: CACHE_SECONDS
+      ffmpegJobs: hlsJobs.size, hlsSegmentSeconds: SEGMENT_SECONDS, hlsCacheSeconds: CACHE_SECONDS, hostlessCacheEnabled: HOSTLESS_CACHE_ENABLED
     }));
   }
 
