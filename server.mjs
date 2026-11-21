@@ -443,7 +443,18 @@ server.listen({ host: HOST, port: PORT, ipv6Only: false }, () => {
   console.log(`🎬 FFmpeg: ${FFMPEG}; segmentos-alvo ${SEGMENT_SECONDS}s; cache ${CACHE_SECONDS}s`);
 });
 
-setInterval(updateCatalog, REFRESH_MS);\n\nconst runtimeSweep = setInterval(() => {\n  runtime.sweepIdle({ idleMs: HLS_IDLE_MS }).catch((error) => console.warn("⚠️ Limpeza de sessões HLS falhou:", error.message));\n}, 30_000);\nruntimeSweep.unref?.();
+setInterval(updateCatalog, REFRESH_MS);\n\nconst runtimeSweep = setInterval(() => {
+  runtime.sweepIdle({ idleMs: HLS_IDLE_MS }).catch((error) => console.warn("⚠️ Limpeza de sessões HLS falhou:", error.message));
+}, 30_000);
+runtimeSweep.unref?.();
+
+const cachePrune = setInterval(() => {
+  const protectedDirs = [...runtime.jobs.keys()].map((id) => path.dirname(hlsPath(id)));
+  runtime.pruneCache(HLS_DIR, { maxAgeMs: 86_400_000, protectedDirs }).then((removed) => {
+    if (removed) console.log(`🧹 Cache HLS antigo removido: ${removed} diretório(s).`);
+  }).catch((error) => console.warn("⚠️ Limpeza do cache HLS falhou:", error.message));
+}, 3_600_000);
+cachePrune.unref?.();
 
 server.on("error", (error) => {
   console.error("❌ Erro no servidor:", error);
