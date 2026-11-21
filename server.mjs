@@ -465,7 +465,7 @@ server.listen({ host: HOST, port: PORT, ipv6Only: false }, () => {
   console.log(`📡 Tunnel receiver: ${TUNNEL_RECEIVER_URL || "gerado por vídeo: npm run tunnel -- <id>"}`);
   console.log(`📡 Playlist direta local: http://127.0.0.1:${PORT}/playlist.m3u`);
   console.log(`🎞️ HLS local por vídeo: http://127.0.0.1:${PORT}/hls/ID/index.m3u8`);
-  console.log(`🩺 Health: http://IP-DO-TERMUX:${PORT}/health`);
+  console.log(`🩺 Health local: http://127.0.0.1:${PORT}/health`);
   console.log(`🔄 Catálogo: a cada ${Math.round(REFRESH_MS / 60000)} minuto(s)`);
   console.log(`🎬 FFmpeg: ${FFMPEG}; segmentos-alvo ${SEGMENT_SECONDS}s; cache ${CACHE_SECONDS}s`);
 });
