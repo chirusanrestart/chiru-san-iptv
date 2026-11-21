@@ -71,7 +71,7 @@ export function startHostlessAgent(options = {}) {
         method: job.method,
         headers,
         redirect: "manual",
-        signal: AbortSignal.timeout(10 * 60 * 1000)
+        signal: AbortSignal.timeout(2 * 60 * 60 * 1000)
       });
     } catch (error) {
       await sendAgentResponse(job, 502, { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" },
