@@ -67,7 +67,7 @@ Edite `.env`:
 - `HLS_MAX_JOBS=2`: limite de processos FFmpeg simultâneos.
 - `HLS_IDLE_MS=90000`: encerra uma geração HLS sem pedidos após 90 segundos.
 
-O endpoint `/stats` mostra as métricas locais; diretórios HLS sem atividade por mais de 24 horas são removidos periodicamente.
+O endpoint `/stats` mostra as métricas locais. Processos HLS sem requisições por 90 segundos são encerrados; registros de processos finalizados expiram após uma hora; diretórios HLS sem atividade por mais de 24 horas são removidos periodicamente. Sessões ativas protegem seus processos da limpeza automática.
 - `TUNNEL_RELAY_URL`: endereço do relay usado pelo comando de tunnel.
 - `HOSTLESS_CACHE_ENABLED=true`: ativa a publicação de segmentos HLS no cache remoto.
 - `HOSTLESS_CACHE_URL`: URL base do serviço Hostless que recebe os segmentos.
