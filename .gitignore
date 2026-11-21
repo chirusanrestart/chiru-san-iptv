@@ -3,3 +3,4 @@ node_modules/
 data/videos.json
 data/videos.json.tmp
 *.log
+data/hls/
