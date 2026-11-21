@@ -51,12 +51,14 @@ test("deduplicates queued and running keys", async () => {
   assert.equal(runs, 1);
 });
 
-test("rejects new work when the pending queue is full", () => {
+test("rejects new work when the pending queue is full", async () => {
   const queue = new AsyncTaskQueue({ concurrency: 1, maxPending: 1 });
   let release;
   queue.enqueue("active", () => new Promise((resolve) => { release = resolve; }));
   queue.enqueue("pending", async () => {});
   assert.equal(queue.enqueue("overflow", async () => {}), false);
   assert.equal(queue.stats().pending, 1);
-  release?.();
+  await turn();
+  release();
+  await turn();
 });
