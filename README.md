@@ -30,7 +30,7 @@ Para testar HLS, abra no player `http://IP-DO-TERMUX:18080/hls/ID_DO_VIDEO/index
 
 ## Segmentação e cache
 
-O FFmpeg usa `-c copy` para copiar os fluxos de áudio e vídeo sem reencodificação. A duração de 4 segundos é um alvo: os cortes reais dependem dos keyframes presentes no vídeo e podem ficar maiores. A janela padrão mantém aproximadamente 180 segundos de segmentos, configurável por `HLS_CACHE_SECONDS`. Como é uma janela deslizante, voltar para trechos antigos pode deixar de funcionar depois que os segmentos saírem do cache.
+O FFmpeg usa `-c copy` para copiar os fluxos de áudio e vídeo sem reencodificação. A duração de 4 segundos é um alvo: os cortes reais dependem dos keyframes presentes no vídeo e podem ficar maiores. A leitura é limitada à velocidade normal do vídeo (`-re`) para o FFmpeg não consumir a origem inteira depressa demais. A janela padrão mantém aproximadamente 180 segundos de segmentos, configurável por `HLS_CACHE_SECONDS`. Como é uma janela deslizante, voltar para trechos antigos pode deixar de funcionar depois que os segmentos saírem do cache.
 
 A cópia de streams não ganha muito com multithread de codificação, pois não há codificação. O trabalho é limitado principalmente pela leitura da origem, rede e gravação dos segmentos. O servidor inicia um único processo FFmpeg por vídeo enquanto o processo está ativo.
 
