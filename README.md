@@ -39,7 +39,7 @@ A cópia de streams não ganha muito com multithread de codificação, pois não
 
 ## Playlist pública pelo Hostless
 
-Quando `HOSTLESS_AGENT_TOKEN` no Termux corresponde ao `AGENT_TOKEN` configurado no app Hostless, o próprio `npm start` conecta o servidor ao tunnel reverso. O player pode carregar diretamente:
+O próprio `npm start` conecta automaticamente o servidor ao tunnel reverso, sem senha ou token. O player pode carregar diretamente:
 
 ```
 https://melissa-iptv.hostless.app/iptv/playlist-hls.m3u8
@@ -47,7 +47,7 @@ https://melissa-iptv.hostless.app/iptv/playlist-hls.m3u8
 
 O Hostless encaminha playlist e manifests ao Termux. Os segmentos HLS continuam sendo publicados no cache RAM do Hostless e a playlist aponta para esses segmentos públicos. O player não precisa conhecer o IP do Termux, executar comandos, informar IDs ou enviar tokens.
 
-Configure a mesma chave aleatória em `HOSTLESS_AGENT_TOKEN` no `.env` do Termux e `AGENT_TOKEN` nas variáveis do app Hostless. Sem a chave correspondente, a URL pública retorna HTTP 503 e o servidor mantém as rotas locais disponíveis.
+Não é necessário configurar credenciais em nenhum dos dois servidores. O player também não envia código, senha, ID ou cabeçalho especial.
 
 ## Catálogo
 
