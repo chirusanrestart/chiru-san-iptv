@@ -410,10 +410,10 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (url.pathname === "/") {
-    const tunnelStatus = TUNNEL_RECEIVER_URL
-      ? `<p>📡 Tunnel receiver: <a href="${TUNNEL_RECEIVER_URL}">${TUNNEL_RECEIVER_URL}</a></p>`
-      : `<p>📡 Tunnel receiver: gerado por vídeo ao executar <code>npm run tunnel -- ID</code>.</p>`;
-    const html = `<!doctype html><html lang="pt-BR"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Chiru-san IPTV</title><h1>📺 Chiru-san IPTV</h1><p>Servidor Termux online.</p><p>🌐 Relay público: <a href="${TUNNEL_RELAY_URL}">${TUNNEL_RELAY_URL}</a></p>${tunnelStatus}<p>Vídeos: ${videos.length}</p><p><a href="/playlist.m3u">Playlist direta</a></p><p><a href="/playlist-hls.m3u">Playlist HLS</a></p><p><a href="/health">Health</a></p></html>`;
+    const publicPlaylist = HOSTLESS_AGENT_TOKEN
+      ? `<p>📺 Player IPTV: <a href="${TUNNEL_RELAY_URL}/iptv/playlist-hls.m3u8">${TUNNEL_RELAY_URL}/iptv/playlist-hls.m3u8</a></p>`
+      : `<p>📺 Player IPTV público: configure HOSTLESS_AGENT_TOKEN no Termux e AGENT_TOKEN no Hostless.</p>`;
+    const html = `<!doctype html><html lang="pt-BR"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Chiru-san IPTV</title><h1>📺 Chiru-san IPTV</h1><p>Servidor Termux online.</p><p>🌐 Relay público: <a href="${TUNNEL_RELAY_URL}">${TUNNEL_RELAY_URL}</a></p>${publicPlaylist}<p>Vídeos: ${videos.length}</p><p><a href="/playlist.m3u">Playlist direta local</a></p><p><a href="/playlist-hls.m3u8">Playlist HLS local</a></p><p><a href="/health">Health</a></p></html>`;
     res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Content-Length": Buffer.byteLength(html) });
     return res.end(html);
   }
