@@ -6,7 +6,8 @@
   "description": "Servidor IPTV pessoal para Termux com catálogo do Google Fotos e relay externo opcional.",
   "scripts": {
     "start": "node server.mjs",
-    "catalog": "node catalogar.mjs"
+    "catalog": "node catalogar.mjs",
+    "tunnel": "node tunnel.mjs"
   },
   "engines": {
     "node": ">=20"
