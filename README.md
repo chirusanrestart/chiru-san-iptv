@@ -1,12 +1,12 @@
 # Chiru-san IPTV 📺
 
-Servidor pessoal para executar diretamente no Termux. O Termux mantém o catálogo, serve a playlist e transmite os vídeos do álbum compartilhado do Google Fotos. O Hostless é somente um relay de bytes, sem catálogo, playlist ou processamento de mídia.
+Servidor pessoal para Termux. O Termux mantém o catálogo do Google Fotos, entrega o vídeo original por HTTP Range e pode gerar HLS sob demanda com FFmpeg em **stream copy** (sem reencodar). O Hostless permanece como relay unidirecional de bytes.
 
-## Instalação no Termux
+## Instalação
 
 ```bash
 pkg update && pkg upgrade
-pkg install nodejs-lts git
+pkg install nodejs-lts git ffmpeg
 git clone https://github.com/chirusanrestart/chiru-san-iptv.git
 cd chiru-san-iptv
 npm install
@@ -14,46 +14,52 @@ cp .env.example .env
 npm start
 ```
 
-O servidor usa a porta 18080 por padrão. Acesse `http://127.0.0.1:18080/` no próprio aparelho ou use o IP local do Termux em outro dispositivo da rede.
+Servidor padrão: `http://127.0.0.1:18080/`.
 
-## Rotas locais
+## Rotas
 
-- `/health`: estado do servidor e quantidade de vídeos.
-- `/catalog.json`: IDs e metadados básicos para identificar os vídeos sem expor as URLs de origem.
-- `/playlist.m3u`: playlist M3U com URLs do próprio Termux.
-- `/video/:id`: streaming direto com encaminhamento HTTP Range, necessário para seek.
+- `/health`: estado do servidor, catálogo e parâmetros HLS.
+- `/catalog.json`: metadados dos vídeos.
+- `/playlist.m3u`: playlist direta, usando `/video/:id`.
+- `/video/:id`: proxy original com encaminhamento de HTTP Range.
+- `/hls/:id/index.m3u8`: HLS gerado sob demanda pelo FFmpeg.
+- `/hls/:id/segment_000000.ts`: segmentos HLS do vídeo.
+
+Para testar HLS, abra no player `http://IP-DO-TERMUX:18080/hls/ID_DO_VIDEO/index.m3u8`.
+
+## Segmentação e cache
+
+O FFmpeg usa `-c copy` para copiar os fluxos de áudio e vídeo sem reencodificação. A duração de 4 segundos é um alvo: os cortes reais dependem dos keyframes presentes no vídeo e podem ficar maiores. A janela padrão mantém aproximadamente 180 segundos de segmentos, configurável por `HLS_CACHE_SECONDS`. Como é uma janela deslizante, voltar para trechos antigos pode deixar de funcionar depois que os segmentos saírem do cache.
+
+A cópia de streams não ganha muito com multithread de codificação, pois não há codificação. O trabalho é limitado principalmente pela leitura da origem, rede e gravação dos segmentos. O servidor inicia um único processo FFmpeg por vídeo enquanto o processo está ativo.
+
+**Compatibilidade:** stream copy não converte codecs. HLS MPEG-TS funciona melhor quando a origem contém vídeo H.264 e áudio AAC. Se a combinação de codecs/container não for compatível com MPEG-TS, o FFmpeg pode falhar; nesse caso, o endpoint direto `/video/:id` continua disponível.
 
 ## Catálogo
 
-O catálogo é extraído do álbum compartilhado do Google Fotos e atualizado a cada 5 minutos por padrão. O arquivo `data/videos.json` fica no armazenamento local e não é enviado ao Git. Se uma atualização falhar, o último catálogo válido permanece em uso.
-
-Atualização manual:
+O catálogo é atualizado a cada 5 minutos por padrão e fica em `data/videos.json`. Se a atualização falhar, o último catálogo válido permanece em uso. Atualização manual:
 
 ```bash
 npm run catalog
 ```
 
-## Túnel Hostless
+## Tunnel Hostless
 
-O relay existente fica em `https://melissa-iptv.hostless.app` e mantém somente os endpoints de transporte:
-
-- Termux envia bytes por `POST /enviar/:id`.
-- O player recebe bytes por `GET /receber/:id`.
-
-Com o servidor Termux ligado, inicie um túnel para o ID do vídeo:
+O tunnel atual envia um único fluxo de bytes por `POST /enviar/:id` e entrega por `GET /receber/:id`:
 
 ```bash
 npm run tunnel -- ID_DO_VIDEO
 ```
 
-O terminal exibirá a URL pública `/receber/ID_DO_VIDEO`. Use essa URL no player enquanto o processo `npm run tunnel` estiver ativo. O relay aceita um remetente e um receptor por ID; encerre o processo quando terminar.
+Esse contrato não transporta a playlist HLS e os vários segmentos como recursos separados, nem encaminha Range de volta ao Termux. Portanto, o HLS e o seek devem ser testados pela URL direta do Termux nesta versão; pelo Hostless, o tunnel continua sendo um fluxo linear sem seek. Para HLS remoto seria necessário ampliar o protocolo do relay para multiplexar pedidos e respostas, o que ainda não foi implementado.
 
-**Limite importante do relay atual:** ele é um fluxo unidirecional de bytes. Ele não encaminha pedidos HTTP Range do player de volta ao Termux. Portanto, seek funciona na URL direta `/video/:id`, mas não fica disponível através desse túnel simples. Para seek remoto via túnel seria necessário um protocolo bidirecional de controle, o que mudaria o contrato do relay.
+## Configuração
 
-## Dynu (opcional)
+Edite `.env`:
 
-Preencha `DYNU_HOSTNAME`, `DYNU_USERNAME` e `DYNU_PASSWORD` no `.env` para atualizar o registro IPv6 a cada cinco minutos. Deixe em branco para desativar.
+- `HLS_SEGMENT_SECONDS=4`: duração-alvo de cada segmento.
+- `HLS_CACHE_SECONDS=180`: tamanho temporal aproximado da janela de cache.
+- `FFMPEG_PATH=ffmpeg`: executável do FFmpeg.
+- `TUNNEL_RELAY_URL`: endereço do relay Hostless.
 
-## Observações
-
-O servidor não baixa nem armazena os vídeos inteiros. Ele encaminha os bytes da origem e respeita Range na rota direta. Use somente conteúdo que você tenha autorização para acessar e compartilhar.
+Não coloque senhas ou tokens no GitHub. O servidor não reencoda nem baixa deliberadamente o vídeo inteiro para um único arquivo; ele gera segmentos conforme o FFmpeg lê a origem. Use apenas conteúdo que você tenha autorização para acessar e compartilhar.
