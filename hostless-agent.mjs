@@ -12,15 +12,6 @@ const FORWARDED_RESPONSE_HEADERS = [
   "vary"
 ];
 
-function makeResponseHeaders(headers) {
-  const result = {};
-  for (const name of FORWARDED_RESPONSE_HEADERS) {
-    const value = headers.get(name);
-    if (value) result[name] = value;
-  }
-  return Buffer.from(JSON.stringify(result)).toString("base64");
-}
-
 export function startHostlessAgent(options = {}) {
   const port = Number(options.port || 18080);
   const relayUrl = String(options.relayUrl || "").replace(/\/+$/, "");
@@ -47,7 +38,7 @@ export function startHostlessAgent(options = {}) {
     const init = { method: "POST", headers: requestHeaders };
     if (body !== undefined && body !== null) {
       init.body = body;
-      if (typeof body !== "string" && typeof body !== "Buffer") init.duplex = "half";
+      if (typeof body !== "string" && !Buffer.isBuffer(body)) init.duplex = "half";
     }
     const response = await fetch(target, init);
     const message = await response.text().catch(() => "");
