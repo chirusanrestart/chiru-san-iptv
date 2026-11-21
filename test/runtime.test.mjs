@@ -46,3 +46,24 @@ test("counts cached bytes, HLS segments and playlists", async () => {
   assert.deepEqual(await runtime.cacheStats(dir), { bytes: 19, segments: 1, playlists: 1, directories: 0 });
   await fs.rm(dir, { recursive: true, force: true });
 });
+
+test("prunes stale cache directories but preserves active ones", async () => {
+  const runtime = new HlsRuntime();
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "iptv-prune-"));
+  const stale = path.join(root, "stale");
+  const active = path.join(root, "active");
+  await fs.mkdir(stale); await fs.mkdir(active);
+  const old = new Date(Date.now() - 10_000);
+  await fs.utimes(stale, old, old); await fs.utimes(active, old, old);
+  assert.equal(await runtime.pruneCache(root, { maxAgeMs: 1000, protectedDirs: [active] }), 1);
+  await assert.rejects(fs.stat(stale), { code: "ENOENT" });
+  await fs.stat(active);
+  await fs.rm(root, { recursive: true, force: true });
+});
+
+test("removes finished jobs from the runtime registry after retention", async () => {
+  const runtime = new HlsRuntime();
+  runtime.setJob("done", { child: { kill() {} }, startedAt: 1, exitCode: 0, closedAt: 1 });
+  await runtime.sweepIdle({ now: 100_000, finishedRetentionMs: 1000 });
+  assert.equal(runtime.getJob("done"), null);
+});
